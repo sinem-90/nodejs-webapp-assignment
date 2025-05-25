@@ -6,4 +6,4 @@ http.createServer(function (req, res) {
     res.end('Welcome to Sinem\'s Amazing Web App!\n');
 }).listen(3333, '0.0.0.0');
 
-console.log('Server running at http://0.0.0.0:3333/');
+console.log('Server running at http://34.238.118.133:3333/');

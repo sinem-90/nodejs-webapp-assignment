@@ -1,0 +1,248 @@
+---
+- name: Complete WebServer Management - Canary Test and Configuration
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+  vars:
+    nodejs_app_dir: /home/ec2-user
+    service_name: helloworld
+    
+  tasks:
+    # CANARY TEST SECTION
+    - name: "=== CANARY TEST PHASE ==="
+      debug:
+        msg: "Starting canary test to verify server connectivity and current state"
+
+    - name: Test connection to target server
+      ping:
+      register: ping_result
+
+    - name: Display connection status
+      debug:
+        msg: "✅ Successfully connected to {{ inventory_hostname }}"
+      when: ping_result is succeeded
+
+    - name: Check current system information
+      debug:
+        msg:
+          - "Server: {{ inventory_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Architecture: {{ ansible_architecture }}"
+          - "Python Version: {{ ansible_python_version }}"
+          - "Available Memory: {{ ansible_memtotal_mb }}MB"
+
+    - name: Check if helloworld service exists
+      service_facts:
+      register: services
+
+    - name: Display current helloworld service status
+      debug:
+        msg: "HelloWorld service status: {{ ansible_facts.services['helloworld.service'].state | default('Not found') }}"
+
+    - name: Test current web application
+      uri:
+        url: "http://localhost:3333"
+        method: GET
+        timeout: 10
+      register: web_test
+      ignore_errors: yes
+
+    - name: Display web application status
+      debug:
+        msg: 
+          - "Web App Status: {{ 'Accessible' if web_test.status == 200 else 'Not accessible' }}"
+          - "Response Code: {{ web_test.status | default('No response') }}"
+
+    - name: Check if MySQL is already installed
+      command: which mysqld
+      register: mysql_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Display MySQL installation status
+      debug:
+        msg: "MySQL Status: {{ 'Already installed' if mysql_check.rc == 0 else 'Not installed' }}"
+
+    - name: Canary test summary
+      debug:
+        msg:
+          - "=== CANARY TEST RESULTS ==="
+          - "✅ Server connectivity: PASSED"
+          - "✅ System information: Retrieved"
+          - "✅ Service check: Completed"
+          - "✅ Web app test: {{ 'PASSED' if web_test.status == 200 else 'NEEDS UPDATE' }}"
+          - "✅ MySQL check: {{ 'Already installed' if mysql_check.rc == 0 else 'Ready for installation' }}"
+          - "🚀 Proceeding with main configuration tasks!"
+
+    # MAIN CONFIGURATION SECTION
+    - name: "=== MAIN CONFIGURATION PHASE ==="
+      debug:
+        msg: "Starting main configuration tasks for HelloWorld app and MariaDB installation"
+
+    - name: Ensure Node.js is installed
+      yum:
+        name: nodejs
+        enablerepo: epel
+        state: present
+
+    - name: Ensure npm is installed
+      yum:
+        name: npm
+        enablerepo: epel
+        state: present
+
+    - name: Stop existing helloworld service
+      service:
+        name: "{{ service_name }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Backup existing helloworld.js file
+      copy:
+        src: "{{ nodejs_app_dir }}/helloworld.js"
+        dest: "{{ nodejs_app_dir }}/helloworld.js.backup"
+        remote_src: yes
+      ignore_errors: yes
+
+    - name: Create updated helloworld.js file
+      copy:
+        content: |
+          var http = require('http');
+
+          http.createServer(function (req, res) {
+              console.log('request received');
+              res.writeHead(200, {'Content-Type': 'text/html'});
+              var html = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                  <title>Sinem's Amazing Web App - Updated via Ansible</title>
+                  <style>
+                      body { font-family: Arial, sans-serif; margin: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+                      .container { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 15px; backdrop-filter: blur(10px); }
+                      h1 { color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+                      .info { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin: 10px 0; }
+                  </style>
+              </head>
+              <body>
+                  <div class="container">
+                      <h1>Welcome to Sinem's Amazing Web App!</h1>
+                      <div class="info">
+                          <p><strong>🚀 Status:</strong> Updated via Ansible Playbook</p>
+                          <p><strong>⏰ Server Time:</strong> ${new Date().toString()}</p>
+                          <p><strong>🔧 Managed By:</strong> Ansible Configuration Management</p>
+                          <p><strong>💾 Database:</strong> MariaDB Ready</p>
+                          <p><strong>🌐 Port:</strong> 3333</p>
+                      </div>
+                      <p>This server has been automatically configured and updated using a single Ansible playbook!</p>
+                      <p><em>Original message: Welcome to Sinem's Amazing Web App!</em></p>
+                  </div>
+              </body>
+              </html>
+              `;
+              res.end(html);
+          }).listen(3333, '0.0.0.0');
+
+          console.log('Server running at http://34.238.118.133:3333/');
+          console.log('Updated via Ansible - MariaDB Ready Server');
+        dest: "{{ nodejs_app_dir }}/helloworld.js"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+
+    - name: Install MariaDB (MySQL alternative for Amazon Linux 2023)
+      yum:
+        name: mariadb-server
+        state: present
+
+    - name: Create systemd service file for helloworld
+      copy:
+        content: |
+          [Unit]
+          Description=HelloWorld Node.js App
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ec2-user
+          WorkingDirectory={{ nodejs_app_dir }}
+          ExecStart=/usr/bin/node {{ nodejs_app_dir }}/helloworld.js
+          Restart=on-failure
+          RestartSec=10
+          Environment=NODE_ENV=production
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/helloworld.service
+        mode: '0644'
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Start and enable MariaDB service
+      systemd:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Wait for MySQL to start
+      wait_for:
+        port: 3306
+        timeout: 60
+
+    - name: Start and enable helloworld service
+      systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+
+    - name: Verify Node.js application is running
+      uri:
+        url: "http://localhost:3333"
+        method: GET
+        status_code: 200
+      register: app_check
+      retries: 3
+      delay: 5
+
+    - name: Display application status
+      debug:
+        msg: "HelloWorld application is running successfully and accessible on port 3333"
+      when: app_check.status == 200
+
+    - name: Verify MariaDB is running
+      command: mysqladmin ping
+      register: mysql_check_final
+      changed_when: false
+
+    - name: Display MariaDB status
+      debug:
+        msg: "MariaDB (MySQL) is installed and running successfully"
+      when: mysql_check_final.rc == 0
+
+    - name: Create test database and table in MariaDB
+      shell: |
+        mysql -e "CREATE DATABASE IF NOT EXISTS testdb;"
+        mysql -e "USE testdb; CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50), role VARCHAR(50), timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+        mysql -e "USE testdb; INSERT INTO users (name, role) VALUES ('Sinem', 'WebApp Owner'), ('Ansible', 'Configuration Manager');"
+        mysql -e "USE testdb; SELECT * FROM users;"
+      register: mysql_test
+      ignore_errors: yes
+
+    - name: Display MariaDB test results
+      debug:
+        var: mysql_test.stdout_lines
+      when: mysql_test.stdout_lines is defined
+
+    - name: Final status check
+      debug:
+        msg: 
+          - "=== ANSIBLE PLAYBOOK EXECUTION COMPLETE ==="
+          - "Canary Test: PASSED"
+          - "HelloWorld.js updated with new content"
+          - "MariaDB installed and configured"
+          - "Services are running and accessible"
+          - "Web Application: http://34.238.118.133:3333"
+          - "MariaDB: Available on port 3306"
+          - "Single playbook execution successful!"

@@ -128,11 +128,11 @@
                   <div class="container">
                       <h1>Welcome to Sinem's Amazing Web App!</h1>
                       <div class="info">
-                          <p><strong>🚀 Status:</strong> Updated via Ansible Playbook</p>
-                          <p><strong>⏰ Server Time:</strong> ${new Date().toString()}</p>
-                          <p><strong>🔧 Managed By:</strong> Ansible Configuration Management</p>
-                          <p><strong>💾 Database:</strong> MariaDB Ready</p>
-                          <p><strong>🌐 Port:</strong> 3333</p>
+                          <p><strong>Status:</strong> Updated via Ansible Playbook</p>
+                          <p><strong>Server Time:</strong> ${new Date().toString()}</p>
+                          <p><strong>Managed By:</strong> Ansible Configuration Management</p>
+                          <p><strong>Database:</strong> MariaDB Ready</p>
+                          <p><strong>Port:</strong> 3333</p>
                       </div>
                       <p>This server has been automatically configured and updated using a single Ansible playbook!</p>
                       <p><em>Original message: Welcome to Sinem's Amazing Web App!</em></p>
